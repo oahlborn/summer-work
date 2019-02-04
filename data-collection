@@ -1,0 +1,79 @@
+'''
+Owen Ahlborn
+Andor
+
+Batch Job Submission File for Pixel Noise
+
+Must be submitted as .py file type to be run using the Batch Submission 
+System at LCLS. Can be submitted for an mpirun using the following Linux 
+command line after accesing the psana servers.
+
+bsub -q psanaq -o %J.log -n 12 mpirun python example_name.py 
+
+Where the desired q is psanaq, the desired directory for the outputted save 
+files is the home directory, the number of desired processors is 12, and the 
+file name of this file is example_name.py
+
+
+More information on batch submission is available here: 
+
+https://confluence.slac.stanford.edu/display/PCDS/Submitting+Batch+Jobs
+
+'''
+
+import h5py       
+from pylab import *
+import psana                        
+from psana import *                 
+import os                
+import numpy as np
+
+
+trials = ['exp=sxrlr4016:run=260:smd', 'exp=sxrlr4016:run=261:smd', 'exp=sxrlr4016:run=263:smd', 'exp=sxrlr4016:run=265:smd']
+
+pixel_noise = load('pixel_noise.npy')     # This file must be written using a script that downloads the trial by                                                               trial pixel noise and averages across this data
+
+gamma_threshold = 350                     # This Gamma threshold should be much lower as we're subtracting off our                                                             pixel noise from the Andor data in this script
+
+
+for run in trials:
+    
+    str1 = ''.join(str(run))              # These lines are splitting up the entries in the trials matrix
+    print(str1)                           # This print line is to help discover which experiment caused issues if they arrise
+    
+    if os.path.exists(str1+'_hybrid_matteo_analysis.h5'):  # This is checking that we don't already have a saved file in the home directory 
+        os.remove(str1+'_hybrid_matteo_analysis.h5')   # with the same name and deleting it if we do to avoid file openning errors
+    
+    
+    ds = psana.MPIDataSource(run)                                            # Accessing the detectors for the given experiment
+    smldata = ds.small_data(str1+'_hybrid_matteo_analysis.h5',gather_interval=100) # Setting how often the mpi run will save             
+    print "small:", dir(smldata)
+    detAndor = psana.Detector('andor_spec')                          # Andor data
+    detevr0 = psana.Detector("evr0")                                 # Event Codes
+    detevr1 = psana.Detector("evr1")                                 # Event Codes
+    epicsMot12RBV = Detector('SXR:EXP:MMS:12.RBV')                   # Angles
+    epicsMot12VAL = Detector('SXR:EXP:MMS:12.VAL')                   # Angles
+    
+     
+    for nevt,evt in enumerate(ds.events()):                           
+        
+        set_angle = epicsMot12VAL()                                  # Reading in the angle data
+        read_angle = epicsMot12RBV()                                 # Reading in the angle data
+        dataAndor = detAndor.image(evt)                              # Reading in the Andor data
+        
+        if dataAndor is None: continue                               # If there's a read in error skip the event
+            
+        conditional_data = dataAndor - pixel_noise                   # Subtracting off our pixel noise
+        hybrid = dataAndor - pixel_noise                             # Subtracting off our pixel noise
+        
+        gamma_test = 0                                                            # Resetting our test variable
+        gamma_test = conditional_data[np.where(conditional_data>gamma_threshold)] # Check that we don't have counts high enough to                                                                                     be gamma rays
+        if gamma_test.shape[0] > 0: continue                                      # If we register gamma rays skip the event
+        
+        rejects = 0                                      # Resetting our test variable
+        rejects = np.where(conditional_data<60)          # Checking that we have at least 60 counts in strings
+        conditional_data[rejects] = 0                    # Set the strings that're less than 60 to zero 
+        if sum(conditional_data) == 0: continue          # Check that we have nonzero entries 
+                           
+        dataAndor = np.squeeze(hybrid)       # Save the Andor data where we haven't reset pixels with less than 60 counts to zero
+        smldata.event(dataAndor=dataAndor, set_angle=set_angle, read_angle = read_angle) # Save
