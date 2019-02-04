@@ -1,0 +1,66 @@
+'''
+Here's where we're figuring out the noise of the different pixels
+dataevr0 == 1 corresponds to trials with no electron firing events 
+so they're the ones we're interested in investigating. Finally, you'll
+still see protection against gamma ray collision events characterized
+here as counts greater than 650 eV. 
+
+'''
+
+from pylab import *
+import matplotlib.pyplot as plt
+import matplotlib.mlab as mlab
+import numpy as np
+import h5py
+import psana
+from psana import * 
+
+ds = psana.MPIDataSource('exp=sxrlr4016:run=260:smd')
+detAndor = psana.Detector('andor_spec')
+detevr0 = psana.Detector("evr0")
+detevr1 = psana.Detector("evr1")
+epicsMot12RBL = Detector('SXR:EXP:MMS:12.RBV')
+epicsMot12VAL = Detector('SXR:EXP:MMS:12.VAL')
+
+def d_fence( float ) :
+    defend_against = 650                    # Should talk to Alex about a reasonable threshold here 
+    if float > defend_against:
+        na_son = 0                          # Email Alex about what he wants the result of this gamma defence to be...  or should I 
+        return(na_son)                      # Should I try to discard the entry completely (add a if output = nan break line to the loop)
+    
+myEnumEvents = enumerate(ds.events())       # probably a faster way to find size(dataAndor) but don't know it yet....
+list = []                                   # probably a faster way to find size(dataAndor) but don't know it yet....
+x = 0                                       # probably a faster way to find size(dataAndor) but don't know it yet....
+for nevt,evt in (myEnumEvents):             # probably a faster way to find size(dataAndor) but don't know it yet....
+    if nevt > 5:                            # probably a faster way to find size(dataAndor) but don't know it yet....
+        break                               # probably a faster way to find size(dataAndor) but don't know it yet....
+dataAndor = detAndor.image(evt)             # probably a faster way to find size(dataAndor) but don't know it yet....
+
+pixel_noise = zeros([(size(dataAndor)),])   # Added columns are for outputted signal at the beginning, index of signal, and angle at the end
+
+trials = ['exp=sxrlr4016:run=260:smd', 'exp=sxrlr4016:run=261:smd', 'exp=sxrlr4016:run=263:smd', 'exp=sxrlr4016:run=260:smd']
+for run in trials:
+    ds = psana.MPIDataSource(run)
+    detAndor = psana.Detector('andor_spec')
+    detevr0 = psana.Detector("evr0")
+    myEnumEvents = enumerate(ds.events(),1)    # Resets our run could add a line above to loop through multiple runs
+    nevt = 0 
+    for nevt,evt in (myEnumEvents):            # Cycling through events in a run
+        if nevt > 111000:                      # This can be increased in order to increase the sample size
+            break                              # Breaks the loop in order for trials 
+        dataAndor = detAndor.image(evt)                   
+        dataevr0 = detevr0.eventCodes(evt)
+        if dataevr0 is None or dataAndor is None:  
+            nevt += 1         # Skip these ^ entries       
+        elif dataevr0.count(162) == 1:     # Can vary 450 in order to test a range of values with an added loop
+            numpdata = dataAndor[0,]         # Obtains Andor data from numpy array
+            data = numpdata.tolist()         # Converts to a list
+            pixel_noise = vstack((pixel_noise,data))  #  Begins of the final ordering of data
+            nevt += 1
+        else:
+            nevt += 1    # Skip
+    print('PROGRESS')
+pixel_noise = delete(pixel_noise,0,0)
+save('pixel_noise', pixel_noise)
+print(pixel_noise)
+print('All Done!')
