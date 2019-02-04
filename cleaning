@@ -1,0 +1,49 @@
+'''
+This script helps convert the new technique camera inputs into actual photon collisions,
+that is to say, isolating events to our target region on the detector, as well as sorting 
+suspected collisions and their spread into their corresponding pixel strings. This makes analysis
+of say one pixel away from the suspected collision possible. 
+
+'''
+
+
+from pylab import *
+import matplotlib.pyplot as plt
+import matplotlib.mlab as mlab
+import numpy as np
+import h5py
+import psana
+from psana import * 
+
+Region_of_Interest_Min = 941
+Region_of_Interest_Max = 991
+
+far_left = []
+left = []
+center = []
+right = []
+far_right = []
+indexes = []
+event = []
+
+for n in range(0,hybrid_total_data.shape[0]):
+    
+    events = hybrid_total_data[n,:]
+    maybes = asarray(np.where(events[:]>=60))
+    test = shape(maybes)
+    
+    for entries in maybes[0,:]:
+        
+        if (entries >= Region_of_Interest_Min and
+            entries <= Region_of_Interest_Max and
+            events[entries] > events[entries-1] and  # These two lines make sure we don't double count events that have
+            events[entries] > events[entries+1]):    # Multiple neighboring pixels over the 60 count threshold
+            
+            event = append(event, n)
+            indexes= append(indexes, entries)
+            far_left = append(far_left, [(events[entries-2])])
+            left = append(left, [(events[entries-1])])
+            center = append(center, [(events[entries])])
+            right = append(right, [(events[entries+1])])
+            far_right = append(far_right, [(events[entries+2])])
+        
